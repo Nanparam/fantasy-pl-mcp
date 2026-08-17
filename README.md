@@ -22,9 +22,7 @@ A Model Context Protocol (MCP) server that provides access to Fantasy Premier Le
 - Claude Desktop
 - Cursor
 - Windsurf
-- Other MCP Compatible Desktop LLMs
-
-Mobile is currently not supported.
+- Other MCP Compatible Desktop LLMs Clients
 
 ## Features
 
