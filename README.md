@@ -33,6 +33,10 @@ Mobile is currently not supported.
 - **Gameweek Data**: View current and past gameweek information
 - **Player Search**: Find players by name or team
 - **Player Comparison**: Compare detailed statistics between any two players
+- **Injury & Lineup Predictions**: Flag injured/doubtful players from RotoWire predicted lineups (no authentication required)
+- **Squad Strategy Advisors**: Get transfer, chip-timing, and underperformer analysis for your own squad
+- **Name-based League & Manager Lookups**: Reference your leagues and rival managers by name instead of numeric ID
+- **Transfers**: Execute transfers on your own team by player name, with a safe dry-run preview before anything is submitted
 
 ## Requirements
 
@@ -141,6 +145,13 @@ Replace `/full/path/to/your/venv/bin/fpl-mcp` with the actual path to the execut
 - Form check: "Show me players in form right now"
 - Differential picks: "Suggest differentials under 10% ownership"
 - Team optimization: "Rate my team and suggest transfers"
+- Injury check: "Which players are injured or doubtful this week?" or "Is [Player] available to play?"
+- Squad strategy: "Which of my players should I transfer out?" or "When should I use my chips?"
+- League lookups by name: "Show standings for my [League Name] league" or "Compare [Manager1] and [Manager2] in [League Name]"
+- Make transfers: "Transfer out [Player1] and bring in [Player2]" (you'll get a preview first, then confirm)
+- Set captain: "Make [Player] my captain and [Player2] vice-captain" (you'll get a preview first, then confirm)
+- Play a chip: "Activate my Bench Boost this week" or "Cancel my active chip" (you'll get a preview first, then confirm)
+- Substitute: "Bring [Bench Player] on for [Starter]" or "Move [Player] to the bench" (you'll get a preview first, then confirm)
 
 #### Tips:
 - Be specific with player names for accurate results
@@ -194,6 +205,12 @@ npx @modelcontextprotocol/inspector python -m fpl_mcp
 - `get_gameweek_live_scores` - Live player points and stats while matches are being played
 - `get_dream_team` - The official highest-scoring XI for a gameweek
 
+### Injuries and lineups
+These tools read RotoWire predicted lineups and **do not require authentication**.
+- `get_injury_and_lineup_predictions` - Players currently flagged OUT or DOUBTFUL, with confidence ratings
+- `get_players_to_avoid` - Players to avoid for transfers, split into high risk (OUT) and medium risk (DOUBTFUL)
+- `check_player_availability` - Check whether a specific player is available, risky, or should be avoided
+
 ### Your team and advice
 - `suggest_captain` - Rank your squad by captain score with per-component reasoning
 - `check_fpl_authentication` - Check if FPL authentication is working correctly
@@ -205,9 +222,23 @@ npx @modelcontextprotocol/inspector python -m fpl_mcp
 - `get_manager_info` - Get manager details (requires authentication)
 - `get_manager_transfer_history` - Get a manager's full transfer history
 
+### Squad strategy (requires authentication)
+- `analyze_squad_recent_performance` - Analyze your squad's recent gameweeks and bucket players into underperformers / solid / stars
+- `recommend_transfers` - Rank your players by transfer-out priority (injuries, form, minutes, fixtures) with points-hit guidance
+- `recommend_chip_strategy` - Recommend chip timing based on upcoming double and blank gameweeks
+
+### Team management — writes (requires authentication)
+- `make_transfers` - Execute transfers on your own team by player name. **Irreversible.** Defaults to a dry-run preview; only submits when called with `confirm=true`
+- `set_captaincy` - Set your captain (and optionally vice-captain) by player name. Both must already be in your squad; preserves any active chip. Defaults to a dry-run preview; only saves when called with `confirm=true`
+- `set_active_chip` - Apply or cancel a chip (Bench Boost, Triple Captain, Free Hit, Wildcard) for the current gameweek. Preserves your captain/bench; only one chip active per gameweek. Defaults to a dry-run preview; only submits when called with `confirm=true`
+- `substitute_players` - Swap a starter with a bench player (or reorder the bench) by name. Validates the resulting formation (1 GKP, 3-5 DEF, 2-5 MID, 1-3 FWD) and preserves captain/vice-captain and any active chip. Defaults to a dry-run preview; only saves when called with `confirm=true`
+
 ### Leagues
-- `get_league_standings` - Get standings for a classic league (requires authentication)
+- `get_league_standings` - Get standings for a classic league by ID (requires authentication)
 - `get_league_analytics` - Analyze a league's managers, ownership trends, and performance
+- `get_league_standings_by_name` - Get standings for one of your leagues by name (requires authentication)
+- `get_manager_gameweek_team` - Get a manager's gameweek squad, resolved by name within one of your leagues (requires authentication)
+- `compare_managers` - Compare multiple managers' gameweek squads, resolved by name within one of your leagues (requires authentication)
 
 ## Prompt Templates
 - `player_analysis_prompt` - Create a prompt for analyzing an FPL player in depth
@@ -307,7 +338,8 @@ variables (all optional):
 ## Limitations
 
 - The FPL API is not officially documented and may change without notice
-- Only read operations are currently supported
+- Most tools are read-only. The write operations are `make_transfers` (executes real, irreversible transfers), `set_captaincy` (changes your captain/vice-captain), `set_active_chip` (applies/cancels a chip), and `substitute_players` (rearranges your XI/bench) — all act on your own team, default to a dry-run preview, and only submit when explicitly called with `confirm=true`
+- Injury and lineup tools scrape RotoWire's public predicted lineups; results depend on RotoWire having published lineups and may be empty close to a page-layout change
 
 ## Troubleshooting
 

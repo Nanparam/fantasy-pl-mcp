@@ -19,7 +19,7 @@ logger = logging.getLogger("fpl-mcp-server")
 mcp = FastMCP(
     name="Fantasy Premier League",
     instructions="Access Fantasy Premier League data and tools",
-    dependencies=["httpx", "diskcache", "jsonschema"],
+    dependencies=["httpx", "diskcache", "jsonschema", "beautifulsoup4"],
 )
 
 # Import modules that use the mcp variable
@@ -29,10 +29,12 @@ from .fpl.tools import (
     register_analysis_tools,
     register_fixture_tools,
     register_gameweek_tools,
+    register_injury_tools,
     register_league_tools,
     register_live_tools,
     register_manager_tools,
     register_player_tools,
+    register_strategy_tools,
     register_team_tools,
 )
 
@@ -150,6 +152,8 @@ register_fixture_tools(mcp)
 register_analysis_tools(mcp)
 register_live_tools(mcp)
 register_advice_tools(mcp)
+register_injury_tools(mcp)
+register_strategy_tools(mcp)
 
 # Register prompts
 @mcp.prompt()

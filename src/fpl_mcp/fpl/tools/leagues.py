@@ -1099,9 +1099,115 @@ async def _get_league_analytics(
     # This shouldn't happen due to earlier validation
     return {"error": "Unknown analysis type"}
 
+# ---------------------------------------------------------------------------
+# Name-based resolution helpers (ported from fpl-mcp-server)
+#
+# fantasy-pl-mcp addresses leagues and managers by numeric ID. These helpers
+# add a thin name -> ID layer so leagues/managers can be referenced by name,
+# resolving against the authenticated user's leagues and league standings.
+# ---------------------------------------------------------------------------
+
+def _normalize(name: str) -> str:
+    """Lowercase and collapse whitespace for lenient name matching."""
+    return " ".join((name or "").lower().split())
+
+
+async def resolve_league_by_name(league_name: str) -> Dict[str, Any]:
+    """Resolve a classic league name to its ID via the authenticated user's leagues.
+
+    Returns {"id", "name"} on a unique match, or {"error", "candidates"} when
+    there is no match or the match is ambiguous.
+    """
+    auth_manager = get_auth_manager()
+    if not auth_manager.team_id:
+        return {
+            "error": "No authenticated team found",
+            "suggestion": "Run 'fpl-mcp-config setup' to store your FPL credentials",
+        }
+
+    try:
+        entry_data = await auth_manager.get_entry_data()
+    except Exception as e:
+        return {"error": f"Could not fetch your leagues: {e}"}
+
+    classic = entry_data.get("leagues", {}).get("classic", []) or []
+    query = _normalize(league_name)
+
+    exact = [l for l in classic if _normalize(l.get("name", "")) == query]
+    partial = [l for l in classic if query in _normalize(l.get("name", ""))]
+    chosen = exact or partial
+
+    if not chosen:
+        return {
+            "error": f"No league matching '{league_name}' in your leagues",
+            "candidates": [l.get("name") for l in classic],
+        }
+    if len(chosen) > 1 and not exact:
+        return {
+            "error": f"'{league_name}' is ambiguous",
+            "candidates": [l.get("name") for l in chosen],
+        }
+
+    match = chosen[0]
+    return {"id": match.get("id"), "name": match.get("name")}
+
+
+async def resolve_manager_in_league(manager_name: str, league_id: int) -> Dict[str, Any]:
+    """Resolve a manager name to their entry ID within a league's standings.
+
+    Matches against both manager name (player_name) and team name (entry_name).
+    Returns {"team_id", "team_name", "manager_name"} or {"error", "candidates"}.
+    """
+    standings = await _get_league_standings(league_id)
+    if "error" in standings:
+        return standings
+
+    rows = standings.get("standings", [])
+    query = _normalize(manager_name)
+
+    def _row_matches_exact(row):
+        return query in (
+            _normalize(row.get("manager_name", "")),
+            _normalize(row.get("team_name", "")),
+        )
+
+    def _row_matches_partial(row):
+        return query in _normalize(row.get("manager_name", "")) or query in _normalize(
+            row.get("team_name", "")
+        )
+
+    exact = [r for r in rows if _row_matches_exact(r)]
+    partial = [r for r in rows if _row_matches_partial(r)]
+    chosen = exact or partial
+
+    if not chosen:
+        return {
+            "error": f"No manager matching '{manager_name}' in this league",
+            "candidates": [
+                {"manager": r.get("manager_name"), "team": r.get("team_name")}
+                for r in rows[:25]
+            ],
+        }
+    if len(chosen) > 1 and not exact:
+        return {
+            "error": f"'{manager_name}' is ambiguous in this league",
+            "candidates": [
+                {"manager": r.get("manager_name"), "team": r.get("team_name")}
+                for r in chosen
+            ],
+        }
+
+    match = chosen[0]
+    return {
+        "team_id": match.get("team_id"),
+        "team_name": match.get("team_name"),
+        "manager_name": match.get("manager_name"),
+    }
+
+
 def register_tools(mcp):
     """Register league analytics tools with the MCP server"""
-    
+
     @mcp.tool()
     async def get_league_standings(league_id: int) -> Dict[str, Any]:
         """Get standings for a specified FPL league
@@ -1141,3 +1247,134 @@ def register_tools(mcp):
             Rich analytics data structured for visualization
         """
         return await _get_league_analytics(league_id, analysis_type, start_gw, end_gw)
+
+    @mcp.tool()
+    async def get_league_standings_by_name(league_name: str, page: int = 1) -> Dict[str, Any]:
+        """Get standings for one of YOUR leagues by name instead of ID.
+
+        Resolves the league name against the leagues your authenticated team is
+        in, then returns its standings. Requires FPL authentication.
+
+        Args:
+            league_name: League name (partial match accepted)
+            page: Standings page (currently informational; top results returned)
+
+        Returns:
+            League standings, or an error with candidate league names
+        """
+        from ..utils.params import unwrap
+
+        logger.info(f"Tool called: get_league_standings_by_name({league_name}, {page})")
+        league_name = unwrap(league_name, "league_name", "name", default=None)
+        if not league_name:
+            return {"error": "league_name is required"}
+
+        resolved = await resolve_league_by_name(league_name)
+        if "error" in resolved:
+            return resolved
+
+        standings = await _get_league_standings(resolved["id"])
+        if "error" not in standings:
+            standings["resolved_league"] = resolved
+            standings["page"] = page
+        return standings
+
+    @mcp.tool()
+    async def get_manager_gameweek_team(
+        manager_name: str, league_name: str, gameweek: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Get a manager's squad for a gameweek, resolved by name within a league.
+
+        Finds the league (among your leagues) and the manager (within that
+        league's standings) by name, then returns their gameweek squad.
+        Requires FPL authentication.
+
+        Args:
+            manager_name: Manager or team name (partial match accepted)
+            league_name: League name to search within (partial match accepted)
+            gameweek: Gameweek number (defaults to current)
+
+        Returns:
+            The manager's squad for the gameweek, or an error with candidates
+        """
+        from ..utils.params import unwrap
+        from .team import get_team_for_gameweek
+
+        logger.info(
+            f"Tool called: get_manager_gameweek_team({manager_name}, {league_name}, {gameweek})"
+        )
+        manager_name = unwrap(manager_name, "manager_name", "name", default=None)
+        league_name = unwrap(league_name, "league_name", default=None)
+        gameweek = unwrap(gameweek, "gameweek", default=None)
+        if not manager_name or not league_name:
+            return {"error": "manager_name and league_name are required"}
+
+        league = await resolve_league_by_name(league_name)
+        if "error" in league:
+            return league
+
+        manager = await resolve_manager_in_league(manager_name, league["id"])
+        if "error" in manager:
+            return manager
+
+        team = await get_team_for_gameweek(gameweek, manager["team_id"])
+        if isinstance(team, dict) and "error" not in team:
+            team["resolved_league"] = league
+            team["resolved_manager"] = manager
+        return team
+
+    @mcp.tool()
+    async def compare_managers(
+        manager_names: List[str], league_name: str, gameweek: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Compare multiple managers' squads for a gameweek, resolved by name.
+
+        Resolves each manager within the named league and returns their squads
+        side by side for the given gameweek. Requires FPL authentication.
+
+        Args:
+            manager_names: List of manager/team names (partial match accepted)
+            league_name: League name to search within (partial match accepted)
+            gameweek: Gameweek number (defaults to current)
+
+        Returns:
+            Per-manager squads keyed by resolved name, plus any resolution errors
+        """
+        from ..utils.params import unwrap
+        from .team import get_team_for_gameweek
+
+        logger.info(
+            f"Tool called: compare_managers({manager_names}, {league_name}, {gameweek})"
+        )
+        manager_names = unwrap(manager_names, "manager_names", default=manager_names)
+        league_name = unwrap(league_name, "league_name", default=None)
+        gameweek = unwrap(gameweek, "gameweek", default=None)
+        if not manager_names or not league_name:
+            return {"error": "manager_names and league_name are required"}
+
+        league = await resolve_league_by_name(league_name)
+        if "error" in league:
+            return league
+
+        results: List[Dict[str, Any]] = []
+        errors: List[Dict[str, Any]] = []
+        for name in manager_names:
+            manager = await resolve_manager_in_league(name, league["id"])
+            if "error" in manager:
+                errors.append({"query": name, **manager})
+                continue
+            team = await get_team_for_gameweek(gameweek, manager["team_id"])
+            results.append(
+                {
+                    "query": name,
+                    "manager": manager,
+                    "team": team,
+                }
+            )
+
+        return {
+            "resolved_league": league,
+            "gameweek": gameweek,
+            "managers": results,
+            "errors": errors,
+        }

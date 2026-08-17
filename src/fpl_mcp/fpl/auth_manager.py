@@ -217,7 +217,49 @@ class FPLAuthManager:
         response.raise_for_status()
 
         return response.json()
-    
+
+    async def make_authed_post(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Make an authenticated POST request to the FPL API.
+
+        Mirrors make_authed_request but issues a POST with a JSON body. Sends
+        the browser-parity headers the write endpoints (e.g. /transfers/)
+        require in addition to the bearer token: JSON content type, the
+        XMLHttpRequest marker, and a transfers Referer/Origin.
+
+        Args:
+            url: Absolute FPL API URL to POST to
+            payload: JSON-serializable request body
+
+        Returns:
+            Parsed JSON response, or {} when the response has no body
+        """
+        session = await self.get_session()
+
+        # Wait for rate limiter (shared with GET/token requests)
+        await self._rate_limiter.acquire()
+
+        headers = {
+            "User-Agent": FPL_USER_AGENT,
+            "X-API-Authorization": f"Bearer {self._access_token}",
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+            "Origin": "https://fantasy.premierleague.com",
+            "Referer": "https://fantasy.premierleague.com/transfers",
+        }
+
+        # Make the POST request in an executor (requests is synchronous)
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: session.post(url, json=payload, headers=headers),
+        )
+
+        # Raise for HTTP errors
+        response.raise_for_status()
+
+        # Some FPL write endpoints return an empty body on success
+        return response.json() if response.content else {}
+
     async def get_my_team(self, team_id: Optional[int] = None) -> Dict[str, Any]:
         """Get current team for the authenticated user"""
         team_id = team_id or self._team_id

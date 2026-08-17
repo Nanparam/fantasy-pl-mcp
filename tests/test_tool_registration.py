@@ -37,6 +37,26 @@ EXPECTED_TOOLS = {
     "get_my_current_team",
     "get_manager_transfer_history",
     "get_price_changes",
+    # ported from fpl-mcp-server: make_transfers (team.py)
+    "make_transfers",
+    # reverse-engineered from the my-team endpoint: set captain / vice-captain
+    "set_captaincy",
+    # reverse-engineered from the my-team endpoint: apply / cancel a chip
+    "set_active_chip",
+    # reverse-engineered from the my-team endpoint: bench / lineup substitution
+    "substitute_players",
+    # ported: injuries.py (RotoWire lineup predictions)
+    "get_injury_and_lineup_predictions",
+    "get_players_to_avoid",
+    "check_player_availability",
+    # ported: strategy.py (authenticated squad advisors)
+    "analyze_squad_recent_performance",
+    "recommend_transfers",
+    "recommend_chip_strategy",
+    # ported: name-based league/manager tools (leagues.py)
+    "get_league_standings_by_name",
+    "get_manager_gameweek_team",
+    "compare_managers",
 }
 
 EXPECTED_PROMPTS = {

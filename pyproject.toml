@@ -35,6 +35,7 @@ dependencies = [
     "jsonschema",
     "requests",
     "cryptography",
+    "beautifulsoup4>=4.12",
 ]
 
 [project.optional-dependencies]
