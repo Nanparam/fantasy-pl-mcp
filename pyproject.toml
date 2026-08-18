@@ -39,6 +39,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Browser-driven login (fpl-mcp-config login): automate obtaining the OIDC
+# refresh token from a username/password. After install, also run:
+#   playwright install chromium
+login = [
+    "playwright>=1.40",
+    "keyring>=24.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.23.0",

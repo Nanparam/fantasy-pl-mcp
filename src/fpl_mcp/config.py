@@ -37,6 +37,23 @@ FPL_OIDC_CLIENT_ID = os.getenv(
     "FPL_OIDC_CLIENT_ID", "bfcbaf69-aade-4c1b-8f00-c1cb8a193030"
 )
 
+# Browser-driven login (optional): drive the PingOne DaVinci login form in a
+# real browser (Playwright) with a username/password, then read the refresh
+# token the SPA persisted in localStorage. Used by 'fpl-mcp-config login'.
+FPL_APP_BASE_URL = os.getenv("FPL_APP_BASE_URL", "https://fantasy.premierleague.com")
+FPL_OIDC_REDIRECT_URI = os.getenv("FPL_OIDC_REDIRECT_URI", f"{FPL_APP_BASE_URL}/")
+FPL_OIDC_SCOPE = os.getenv("FPL_OIDC_SCOPE", "openid profile email offline_access")
+# localStorage key the oidc-client-ts SPA stores its user/token blob under.
+FPL_OIDC_STORAGE_KEY = os.getenv(
+    "FPL_OIDC_STORAGE_KEY",
+    f"oidc.user:{FPL_OIDC_AUTHORITY}:{FPL_OIDC_CLIENT_ID}",
+)
+# Credential store used to resolve username/password for browser login when
+# they are not passed explicitly: system keyring first, then env vars.
+FPL_CREDENTIAL_TARGET = os.getenv("FPL_CREDENTIAL_TARGET", "fantasy.premierleague.com")
+FPL_ENV_USERNAME = "FPL_USERNAME"
+FPL_ENV_PASSWORD = "FPL_PASSWORD"
+
 # Caching configuration
 CACHE_TTL = int(os.getenv("CACHE_TTL", "3600"))  # Default: 1 hour
 

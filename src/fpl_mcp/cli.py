@@ -147,6 +147,94 @@ def setup_credentials():
         print("You may need to install the cryptography library: pip install cryptography")
         return False
 
+async def login_with_browser(
+    username: str = "",
+    password: str = "",
+    team_id: str = "",
+    headless: bool = True,
+    save_credentials: bool = False,
+):
+    """Log in via a real browser to obtain and store a refresh token.
+
+    Automates the manual 'copy oidc.user from DevTools' step: drives the
+    PingOne login form with a username/password, reads the refresh token the
+    web app stores in localStorage, auto-discovers the team id, validates the
+    token against the FPL API, and stores it encrypted.
+    """
+    from .fpl.auth_manager import get_auth_manager
+    from .fpl.browser_login import (
+        LoginError,
+        login as browser_login,
+        resolve_credentials,
+        store_login_credentials,
+    )
+
+    print("FPL MCP Server - Browser Login")
+    print("==============================")
+
+    # Resolve credentials from args, then keyring, then env vars.
+    try:
+        username, password = resolve_credentials(username or None, password or None)
+    except LoginError:
+        # Prompt interactively as a last resort.
+        if not username:
+            username = input("FPL email: ").strip()
+        if not password:
+            password = getpass.getpass("FPL password: ").strip()
+        if not (username and password):
+            print("Error: username and password are required.")
+            return False
+
+    if save_credentials:
+        try:
+            store_login_credentials(username, password)
+            print("Saved credentials to the system keyring for future logins.")
+        except LoginError as e:
+            print(f"Warning: could not save credentials to keyring: {e}")
+
+    print("Launching browser to complete the PingOne login...")
+    try:
+        result = browser_login(username=username, password=password, headless=headless)
+    except LoginError as e:
+        print(f"Login failed: {e}")
+        return False
+
+    refresh_token = result.refresh_token
+    print(f"Obtained refresh token ({len(refresh_token)} chars).")
+
+    auth_manager = get_auth_manager()
+
+    # Discover the team id from /api/me/ if not supplied.
+    resolved_team_id = team_id.strip() or auth_manager.team_id
+    if not resolved_team_id:
+        auth_manager.set_credentials(refresh_token, "0")  # temp, to enable /me/
+        try:
+            resolved_team_id = await auth_manager.discover_team_id()
+        except Exception as e:
+            print(f"Could not auto-discover team id: {e}")
+            resolved_team_id = None
+
+    if not resolved_team_id:
+        resolved_team_id = input("Enter your FPL team ID: ").strip()
+    if not resolved_team_id:
+        print("Error: team ID is required.")
+        return False
+
+    # Store and validate. set_credentials clears the session so the next call
+    # re-authenticates with the freshly stored token.
+    auth_manager.set_credentials(refresh_token, str(resolved_team_id))
+    try:
+        team_data = await auth_manager.get_my_team()
+    except Exception as e:
+        print(f"Token was stored but failed validation: {e}")
+        return False
+
+    print("\nLogin successful! Credentials encrypted and saved to ~/.fpl-mcp/")
+    print(f"Team ID: {resolved_team_id}")
+    print(f"Squad picks returned: {len(team_data.get('picks', []))}")
+    return True
+
+
 async def test_auth():
     """Test authentication with FPL API"""
     try:
@@ -188,15 +276,49 @@ def main():
     parser = argparse.ArgumentParser(description="FPL MCP Server Configuration")
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
     
-    subparsers.add_parser("setup", help="Set up FPL credentials")
+    subparsers.add_parser("setup", help="Set up FPL credentials (paste refresh token)")
     subparsers.add_parser("test", help="Test FPL authentication")
 
+    login_parser = subparsers.add_parser(
+        "login",
+        help="Log in with username/password via a browser to obtain a refresh token",
+    )
+    login_parser.add_argument(
+        "-u", "--username", default="", help="FPL email (else keyring/env/prompt)"
+    )
+    login_parser.add_argument(
+        "-p", "--password", default="", help="FPL password (else keyring/env/prompt)"
+    )
+    login_parser.add_argument(
+        "-t", "--team-id", default="", help="FPL team ID (auto-discovered if omitted)"
+    )
+    login_parser.add_argument(
+        "--no-headless",
+        action="store_true",
+        help="Show the browser window (useful to solve a bot challenge)",
+    )
+    login_parser.add_argument(
+        "--save-credentials",
+        action="store_true",
+        help="Save username/password to the system keyring for future logins",
+    )
+
     args = parser.parse_args()
-    
+
     if args.command == "setup":
         setup_credentials()
     elif args.command == "test":
         asyncio.run(test_auth())
+    elif args.command == "login":
+        asyncio.run(
+            login_with_browser(
+                username=args.username,
+                password=args.password,
+                team_id=args.team_id,
+                headless=not args.no_headless,
+                save_credentials=args.save_credentials,
+            )
+        )
     else:
         parser.print_help()
 

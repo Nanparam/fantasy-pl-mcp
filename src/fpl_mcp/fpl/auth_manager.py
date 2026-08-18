@@ -300,10 +300,28 @@ class FPLAuthManager:
         team_id = team_id or self._team_id
         if not team_id:
             raise ValueError("Team ID must be provided")
-            
+
         url = f"{FPL_API_BASE_URL}/entry/{team_id}/"
         return await self.make_authed_request(url)
-        
+
+    async def get_me(self) -> Dict[str, Any]:
+        """Get the authenticated user's profile via /api/me/.
+
+        Useful for discovering the manager's entry (team) id after a fresh
+        login: the entry id is at ``player.entry`` in the response.
+        """
+        return await self.make_authed_request(f"{FPL_API_BASE_URL}/me/")
+
+    async def discover_team_id(self) -> Optional[str]:
+        """Return the authenticated user's entry (team) id, or None.
+
+        Requires a working refresh token. Reads ``player.entry`` from /api/me/.
+        """
+        data = await self.get_me()
+        player = data.get("player") or {}
+        entry = player.get("entry")
+        return str(entry) if entry else None
+
     async def close(self):
         """Close the session"""
         if self._session is not None:

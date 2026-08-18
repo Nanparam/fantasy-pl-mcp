@@ -86,6 +86,10 @@ Configure Claude Desktop to use the installed package by editing your `claude_de
     "fantasy-pl": {
       "command": "python",
       "args": ["-m", "fpl_mcp"]
+      "env": {
+         "FPL_CREDENTIAL_TARGET": "fantasy.premierleague.com",
+         "FPL_TEAM_ID": "1234567"
+      }
     }
   }
 }
@@ -98,6 +102,10 @@ Configure Claude Desktop to use the installed package by editing your `claude_de
   "mcpServers": {
     "fantasy-pl": {
       "command": "/full/path/to/your/venv/bin/fpl-mcp"
+      "env": {
+         "FPL_CREDENTIAL_TARGET": "fantasy.premierleague.com",
+         "FPL_TEAM_ID": "1234567"
+      }
     }
   }
 }
@@ -253,8 +261,37 @@ FPL migrated its login to PingOne (Ping Identity) OIDC, so authentication now us
 short-lived access tokens automatically, and requests are sent with an
 `X-API-Authorization: Bearer` header.
 
-To use features requiring authentication (like accessing your team or private leagues), set up
-your refresh token:
+To use features requiring authentication (like accessing your team or private leagues), you can
+either **log in automatically with your username and password** (recommended) or paste a refresh
+token manually.
+
+### Option A: Automatic browser login (recommended)
+
+Obtain and store the refresh token automatically — no DevTools needed. This drives the PingOne
+login form in a headless browser, reads the refresh token the web app stores, auto-discovers your
+team ID, and saves everything encrypted.
+
+```bash
+# Install the optional login extras, then the browser engine
+pip install "fpl-mcp[login]"
+playwright install chromium
+
+# Log in (prompts for email/password; team ID is auto-discovered)
+fpl-mcp-config login
+
+# Or pass credentials non-interactively
+fpl-mcp-config login --username you@example.com --password 'secret'
+
+# Save credentials to the system keyring so future logins need no prompt
+fpl-mcp-config login --save-credentials
+```
+
+Credentials for `login` are resolved from (in order): command-line flags, the system keyring
+(Windows Credential Manager / macOS Keychain / SecretService) under target
+`fantasy.premierleague.com`, then the `FPL_USERNAME` / `FPL_PASSWORD` environment variables. If a
+bot challenge blocks the headless run, retry with `--no-headless` to solve it interactively.
+
+### Option B: Manual refresh-token setup
 
 ```bash
 # Run the credential setup tool
@@ -291,6 +328,7 @@ fpl-mcp-config test
 Alternatively, you can manually configure authentication:
 1. Create `~/.fpl-mcp/.env` file with:
    ```
+   FPL_CREDENTIAL_TARGET=your_keyring_target
    FPL_REFRESH_TOKEN=your_refresh_token
    FPL_TEAM_ID=your_team_id
    ```
@@ -305,6 +343,7 @@ Alternatively, you can manually configure authentication:
 
 3. Or set environment variables:
    ```bash
+   export FPL_CREDENTIAL_TARGET=your_keyring_target
    export FPL_REFRESH_TOKEN=your_refresh_token
    export FPL_TEAM_ID=your_team_id
    ```
