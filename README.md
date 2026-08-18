@@ -22,9 +22,7 @@ A Model Context Protocol (MCP) server that provides access to Fantasy Premier Le
 - Claude Desktop
 - Cursor
 - Windsurf
-- Other MCP Compatible Desktop LLMs
-
-Mobile is currently not supported.
+- Other MCP Compatible Desktop LLMs Clients
 
 ## Features
 
@@ -46,28 +44,16 @@ Mobile is currently not supported.
 
 ## Installation
 
-### Option 1: Install from PyPI (Recommended)
-
-```bash
-pip install fpl-mcp
-```
-
-### Option 1b: Install with Development Dependencies
-
-```bash
-pip install "fpl-mcp[dev]"
-```
-
 ### Option 2: Install from GitHub
 
 ```bash
-pip install git+https://github.com/rishijatia/fantasy-pl-mcp.git
+pip install git+https://github.com/Nanparam/fantasy-pl-mcp.git
 ```
 
 ### Option 3: Clone and Install Locally
 
 ```bash
-git clone https://github.com/rishijatia/fantasy-pl-mcp.git
+git clone https://github.com/Nanparam/fantasy-pl-mcp.git
 cd fantasy-pl-mcp
 pip install -e .
 ```
@@ -410,13 +396,11 @@ For more details, please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file.
 
 ## Acknowledgments
 
+- [Original Author] https://github.com/rishijatia/fantasy-pl-mcp/
 - [Fantasy Premier League API](https://fantasy.premierleague.com/api/) for providing the data
 - [Model Context Protocol](https://modelcontextprotocol.io/) for the connectivity standard
-- [Claude](https://claude.ai/) for the AI assistant capabilities
 
 ## Citation
-
-If you use this package in your research or project, please consider citing it:
 
 ```bibtex
 @software{fpl_mcp,
