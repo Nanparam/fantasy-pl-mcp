@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List
 from ..auth_manager import get_auth_manager
 from ..api import api
 from ..cache import cache
+from ..utils.gameweek import get_current_gameweek_id
 
 logger = logging.getLogger(__name__)
 
