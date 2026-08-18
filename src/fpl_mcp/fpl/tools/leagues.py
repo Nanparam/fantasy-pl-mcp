@@ -40,6 +40,119 @@ async def get_league_standings_data(league_id: int) -> Dict[str, Any]:
             "error": f"Failed to retrieve league standings: {str(e)}"
         }
 
+
+async def fetch_all_league_managers(
+    league_id: int, max_managers: int = 200
+) -> Dict[str, Any]:
+    """Page through a classic league's managers via the public standings API.
+
+    The FPL endpoint `leagues-classic/{id}/standings/` paginates its
+    `standings.results` list (~50 per page) with a `has_next` flag and a
+    `page_standings` query param. Before a season starts, joiners appear under
+    `new_entries` instead. This helper walks whichever list is populated up to
+    `max_managers` and returns a flat, normalized manager list. The endpoint is
+    public, so no authentication is required.
+
+    Args:
+        league_id: ID of the classic league
+        max_managers: Safety cap on how many managers to collect
+
+    Returns:
+        {league, managers, total_returned, has_more, source} or {error}
+    """
+    first_page = None
+    managers: List[Dict[str, Any]] = []
+
+    # First fetch the ranked standings; fall back to new_entries if empty.
+    page = 1
+    source = "standings"
+    while len(managers) < max_managers:
+        endpoint = f"leagues-classic/{league_id}/standings/?page_standings={page}"
+        try:
+            data = await api._make_request(endpoint)
+        except Exception as e:
+            logger.error(f"Error fetching league {league_id} page {page}: {e}")
+            if first_page is None:
+                return {"error": f"Failed to retrieve league {league_id}: {e}"}
+            break
+
+        if first_page is None:
+            first_page = data
+
+        results = (data.get("standings") or {}).get("results", [])
+        for r in results:
+            managers.append(
+                {
+                    "entry": r.get("entry"),
+                    "team_name": r.get("entry_name"),
+                    "manager_name": r.get("player_name"),
+                    "rank": r.get("rank"),
+                    "last_rank": r.get("last_rank"),
+                    "total_points": r.get("total"),
+                    "event_total": r.get("event_total"),
+                }
+            )
+
+        if not (data.get("standings") or {}).get("has_next"):
+            break
+        page += 1
+
+    has_more_standings = bool(
+        (first_page or {}).get("standings", {}).get("has_next")
+    ) and len(managers) >= max_managers
+
+    # Pre-season: standings empty -> list new_entries (pre-season joiners)
+    if not managers:
+        source = "new_entries"
+        page = 1
+        while len(managers) < max_managers:
+            endpoint = (
+                f"leagues-classic/{league_id}/standings/?page_new_entries={page}"
+            )
+            try:
+                data = await api._make_request(endpoint)
+            except Exception as e:
+                logger.error(f"Error fetching league {league_id} new_entries page {page}: {e}")
+                break
+            if first_page is None:
+                first_page = data
+            entries = (data.get("new_entries") or {}).get("results", [])
+            for r in entries:
+                managers.append(
+                    {
+                        "entry": r.get("entry"),
+                        "team_name": r.get("entry_name"),
+                        "manager_name": (
+                            f"{r.get('player_first_name', '')} "
+                            f"{r.get('player_last_name', '')}"
+                        ).strip(),
+                        "rank": None,
+                        "last_rank": None,
+                        "total_points": None,
+                        "event_total": None,
+                        "joined_time": r.get("joined_time"),
+                    }
+                )
+            if not (data.get("new_entries") or {}).get("has_next"):
+                break
+            page += 1
+
+    league = (first_page or {}).get("league", {})
+    trimmed = managers[:max_managers]
+    return {
+        "league": {
+            "id": league.get("id", league_id),
+            "name": league.get("name"),
+            "type": "Public" if league.get("league_type") == "s" else "Private/Invitational",
+            "scoring": "Classic" if league.get("scoring") == "c" else "Head-to-Head",
+            "start_event": league.get("start_event"),
+        },
+        "managers": trimmed,
+        "total_returned": len(trimmed),
+        "has_more": has_more_standings or len(managers) > max_managers,
+        "source": source,
+    }
+
 def parse_league_standings(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Parse league standings data into a more usable format
@@ -1247,6 +1360,41 @@ def register_tools(mcp):
             Rich analytics data structured for visualization
         """
         return await _get_league_analytics(league_id, analysis_type, start_gw, end_gw)
+
+    @mcp.tool()
+    async def get_league_managers(league_id: int, max_managers: int = 200) -> Dict[str, Any]:
+        """List all managers (entries) in a classic league, paging through results.
+
+        Unlike get_league_standings, which returns only the top slice, this walks
+        the league's standings across pages and returns a flat manager list with
+        each manager's entry ID, team name, manager name, rank, and total points.
+        Before a season starts (empty standings) it lists the league's pre-season
+        joiners instead. Works on any public league; no authentication required.
+
+        Args:
+            league_id: ID of the classic league (the number in the league URL)
+            max_managers: Maximum managers to return (safety cap, default 200)
+
+        Returns:
+            League info plus a `managers` list, with `total_returned`, `has_more`,
+            and `source` ("standings" or "new_entries"); or an error dict
+        """
+        from ..utils.params import unwrap
+
+        logger.info(f"Tool called: get_league_managers({league_id}, {max_managers})")
+
+        league_id = unwrap(league_id, "league_id", "id", default=league_id)
+        max_managers = unwrap(max_managers, "max_managers", default=max_managers)
+        try:
+            league_id = int(league_id)
+        except (TypeError, ValueError):
+            return {"error": f"Invalid league_id: {league_id}"}
+        try:
+            max_managers = max(1, min(2000, int(max_managers)))
+        except (TypeError, ValueError):
+            max_managers = 200
+
+        return await fetch_all_league_managers(league_id, max_managers)
 
     @mcp.tool()
     async def get_league_standings_by_name(league_name: str, page: int = 1) -> Dict[str, Any]:

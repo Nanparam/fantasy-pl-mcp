@@ -15,6 +15,8 @@ EXPECTED_TOOLS = {
     # leagues.py
     "get_league_standings",
     "get_league_analytics",
+    # reverse-engineered from the standings API: list all managers in a league
+    "get_league_managers",
     # players.py
     "get_player_information",
     "search_fpl_players",

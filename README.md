@@ -36,7 +36,8 @@ Mobile is currently not supported.
 - **Injury & Lineup Predictions**: Flag injured/doubtful players from RotoWire predicted lineups (no authentication required)
 - **Squad Strategy Advisors**: Get transfer, chip-timing, and underperformer analysis for your own squad
 - **Name-based League & Manager Lookups**: Reference your leagues and rival managers by name instead of numeric ID
-- **Transfers**: Execute transfers on your own team by player name, with a safe dry-run preview before anything is submitted
+- **League Manager Listing**: Page through every manager in a classic league (entry ID, team, rank, points)
+- **Team Management Writes**: Make transfers, set your captain/vice-captain, apply or cancel chips, and rearrange your XI/bench by player name — each with a safe dry-run preview before anything is submitted
 
 ## Requirements
 
@@ -236,6 +237,7 @@ These tools read RotoWire predicted lineups and **do not require authentication*
 ### Leagues
 - `get_league_standings` - Get standings for a classic league by ID (requires authentication)
 - `get_league_analytics` - Analyze a league's managers, ownership trends, and performance
+- `get_league_managers` - List all managers (entries) in a classic league, paging through the standings (or pre-season joiners). Returns entry ID, team name, manager name, rank, and points. Works on any public league; no authentication required
 - `get_league_standings_by_name` - Get standings for one of your leagues by name (requires authentication)
 - `get_manager_gameweek_team` - Get a manager's gameweek squad, resolved by name within one of your leagues (requires authentication)
 - `compare_managers` - Compare multiple managers' gameweek squads, resolved by name within one of your leagues (requires authentication)
